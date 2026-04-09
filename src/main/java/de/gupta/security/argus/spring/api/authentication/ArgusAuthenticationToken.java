@@ -33,6 +33,7 @@ public final class ArgusAuthenticationToken extends AbstractAuthenticationToken
     @Override
     public Object getCredentials()
     {
+        // TODO: should it be raw token or token from AuthenticatedIdentity? maybe if authenticated idnetity present, its token else raw token?
         return rawToken;
     }
 

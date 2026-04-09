@@ -32,6 +32,7 @@ public final class ArgusAuthenticationProvider implements AuthenticationProvider
     @Override
     public Authentication authenticate(final Authentication authentication) throws AuthenticationException
     {
+        // TODO: good candidate for functional Unfolding/Fallible chain
         if (!(authentication instanceof ArgusAuthenticationToken tokenRequest) || !(tokenRequest.getCredentials() instanceof String rawToken))
         {
             return null;
@@ -57,6 +58,7 @@ public final class ArgusAuthenticationProvider implements AuthenticationProvider
 
     private Set<GrantedAuthority> authoritiesOf(final AuthenticatedIdentity identity)
     {
+        // TODO: wanna try the Cascade abstraction from aletheia for this?
         return identity.roles().stream()
                        .flatMap(role -> roleAuthorities(role).stream())
                        .map(SimpleGrantedAuthority::new)
@@ -76,6 +78,7 @@ public final class ArgusAuthenticationProvider implements AuthenticationProvider
     {
         return switch (failure)
         {
+            // TODO: all cases are basically same. should we pull FailureDetails in AuthenticationFailure interface?
             case InvalidCredential invalidCredential -> invalidCredential.details()
                     .map(FailureDetails::message)
                     .orElse(invalidCredential.reason().description());

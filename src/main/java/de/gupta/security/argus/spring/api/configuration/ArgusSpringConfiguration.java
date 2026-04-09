@@ -30,6 +30,8 @@ import org.springframework.security.web.authentication.AuthenticationConverter;
 
 import java.time.Clock;
 
+// TODO: I dont quite understand this. is this class thoroughly tested with all the conditional and non-conditional branches?
+// TODO: does it make sense to refactor it to make intent clearer and to make explicit the ordering of what method is fired when?
 @Configuration(proxyBeanMethods = false)
 public class ArgusSpringConfiguration
 {

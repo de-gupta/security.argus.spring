@@ -74,4 +74,3 @@ public final class DefaultArgusSecurityContextQueryManager implements ArgusSecur
         return role.regionMatches(true, 0, "ROLE_", 0, "ROLE_".length()) ? role.substring(5) : role;
     }
 }
-
