@@ -27,75 +27,61 @@ import java.util.stream.Collectors;
 
 public final class ArgusAuthenticationProvider implements AuthenticationProvider
 {
-    private final Authenticator authenticator;
+	private final Authenticator authenticator;
 
-    @Override
-    public Authentication authenticate(final Authentication authentication) throws AuthenticationException
-    {
-        // TODO: good candidate for functional Unfolding/Fallible chain
-        if (!(authentication instanceof ArgusAuthenticationToken tokenRequest) || !(tokenRequest.getCredentials() instanceof String rawToken))
-        {
-            return null;
-        }
+	@Override
+	public Authentication authenticate(final Authentication authentication) throws AuthenticationException
+	{
+		// TODO: good candidate for functional Unfolding/Fallible chain
+		if (!(authentication instanceof ArgusAuthenticationToken tokenRequest) || !(tokenRequest.getCredentials() instanceof String rawToken))
+		{
+			return null;
+		}
 
-        final AuthenticationResult authenticationResult = authenticator.authenticate(rawToken);
-        return switch (authenticationResult)
-        {
-            case AuthenticationSuccess success -> ArgusAuthenticationToken.authenticated(success.identity(),
-                    authoritiesOf(success.identity()));
-            case InvalidCredential failure -> throw new BadCredentialsException(messageOf(failure));
-            case IdentityNotResolved failure -> throw new BadCredentialsException(messageOf(failure));
-            case AuthenticationNotCurrent failure -> throw new CredentialsExpiredException(messageOf(failure));
-            case AuthenticationUnavailable failure -> throw new AuthenticationServiceException(messageOf(failure));
-        };
-    }
+		final AuthenticationResult authenticationResult = authenticator.authenticate(rawToken);
+		return switch (authenticationResult)
+		{
+			case AuthenticationSuccess success -> ArgusAuthenticationToken.authenticated(success.identity(),
+					authoritiesOf(success.identity()));
+			case InvalidCredential failure -> throw new BadCredentialsException(messageOf(failure));
+			case IdentityNotResolved failure -> throw new BadCredentialsException(messageOf(failure));
+			case AuthenticationNotCurrent failure -> throw new CredentialsExpiredException(messageOf(failure));
+			case AuthenticationUnavailable failure -> throw new AuthenticationServiceException(messageOf(failure));
+		};
+	}
 
-    @Override
-    public boolean supports(final Class<?> authentication)
-    {
-        return ArgusAuthenticationToken.class.isAssignableFrom(authentication);
-    }
+	@Override
+	public boolean supports(final Class<?> authentication)
+	{
+		return ArgusAuthenticationToken.class.isAssignableFrom(authentication);
+	}
 
-    private Set<GrantedAuthority> authoritiesOf(final AuthenticatedIdentity identity)
-    {
-        // TODO: wanna try the Cascade abstraction from aletheia for this?
-        return identity.roles().stream()
-                       .flatMap(role -> roleAuthorities(role).stream())
-                       .map(SimpleGrantedAuthority::new)
-                       .collect(Collectors.toCollection(LinkedHashSet::new));
-    }
+	private Set<GrantedAuthority> authoritiesOf(final AuthenticatedIdentity identity)
+	{
+		return identity.roles().stream()
+		               .flatMap(role -> roleAuthorities(role).stream())
+		               .map(SimpleGrantedAuthority::new)
+		               .collect(Collectors.toCollection(LinkedHashSet::new));
+	}
 
-    private Set<String> roleAuthorities(final String role)
-    {
-        if (role.regionMatches(true, 0, "ROLE_", 0, "ROLE_".length()))
-        {
-            return Set.of(role);
-        }
-        return Set.of(role, "ROLE_" + role);
-    }
+	private Set<String> roleAuthorities(final String role)
+	{
+		if (role.regionMatches(true, 0, "ROLE_", 0, "ROLE_".length()))
+		{
+			return Set.of(role);
+		}
+		return Set.of(role, "ROLE_" + role);
+	}
 
-    private String messageOf(final AuthenticationFailure failure)
-    {
-        return switch (failure)
-        {
-            // TODO: all cases are basically same. should we pull FailureDetails in AuthenticationFailure interface?
-            case InvalidCredential invalidCredential -> invalidCredential.details()
-                    .map(FailureDetails::message)
-                    .orElse(invalidCredential.reason().description());
-            case IdentityNotResolved identityNotResolved -> identityNotResolved.details()
-                    .map(FailureDetails::message)
-                    .orElse(identityNotResolved.reason().description());
-            case AuthenticationNotCurrent authenticationNotCurrent -> authenticationNotCurrent.details()
-                    .map(FailureDetails::message)
-                    .orElse(authenticationNotCurrent.reason().description());
-            case AuthenticationUnavailable authenticationUnavailable -> authenticationUnavailable.details()
-                    .map(FailureDetails::message)
-                    .orElse(authenticationUnavailable.reason().description());
-        };
-    }
+	private String messageOf(final AuthenticationFailure failure)
+	{
+		return failure.details()
+		              .map(FailureDetails::message)
+		              .orElseGet(failure::description);
+	}
 
-    public ArgusAuthenticationProvider(final Authenticator authenticator)
-    {
-        this.authenticator = Objects.requireNonNull(authenticator, "authenticator must not be null");
-    }
+	public ArgusAuthenticationProvider(final Authenticator authenticator)
+	{
+		this.authenticator = Objects.requireNonNull(authenticator, "authenticator must not be null");
+	}
 }

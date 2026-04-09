@@ -66,7 +66,6 @@ public final class ArgusAuthenticationFilter extends OncePerRequestFilter
                          .supple();
     }
 
-    // TODO: who creates this? the library itself, right? then remove the validation noise with requireNonNull
     public ArgusAuthenticationFilter(final AuthenticationManager authenticationManager,
                                      final AuthenticationConverter authenticationConverter,
                                      final AuthenticationEntryPoint authenticationEntryPoint)
