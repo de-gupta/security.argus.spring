@@ -1,6 +1,5 @@
 package de.gupta.security.argus.spring.adapter.method;
 
-import de.gupta.aletheia.functional.Unfolding;
 import de.gupta.security.argus.spring.api.context.ArgusSecurityContextQueryManager;
 import de.gupta.security.argus.spring.api.method.ArgusMethodAccess;
 
@@ -36,8 +35,9 @@ public final class DefaultArgusMethodAccess implements ArgusMethodAccess
     @Override
     public boolean hasSubject(final String subject)
     {
-        return Unfolding.augur(securityContextQueryManager.subject())
-                        .cleave(currentSubject -> currentSubject.equals(subject), true, false);
+        return securityContextQueryManager.subject()
+                                          .map(subject::equals)
+                                          .orElse(false);
     }
 
     public DefaultArgusMethodAccess(final ArgusSecurityContextQueryManager securityContextQueryManager)
@@ -46,4 +46,3 @@ public final class DefaultArgusMethodAccess implements ArgusMethodAccess
                 "securityContextQueryManager must not be null");
     }
 }
-
