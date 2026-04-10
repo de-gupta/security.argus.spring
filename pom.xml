@@ -19,7 +19,7 @@
 
     <properties>
         <spring.boot.version>3.5.13</spring.boot.version>
-        <security.argus.version>0.1.1-SNAPSHOT</security.argus.version>
+        <security.argus.version>0.1.1</security.argus.version>
 
         <security.dependencies.bom.version>0.2.1</security.dependencies.bom.version>
     </properties>
