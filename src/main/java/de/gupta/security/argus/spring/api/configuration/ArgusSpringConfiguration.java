@@ -21,13 +21,20 @@ import de.gupta.security.argus.spring.api.method.ArgusMethodAccess;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.annotation.AnnotationTemplateExpressionDefaults;
 import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationConverter;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import java.time.Clock;
 
@@ -131,5 +138,30 @@ public class ArgusSpringConfiguration
     AnnotationTemplateExpressionDefaults annotationTemplateExpressionDefaults()
     {
         return new AnnotationTemplateExpressionDefaults();
+    }
+
+    @Bean(name = "argusDefaultSecurityFilterChain")
+    @Order(-99)
+    @ConditionalOnMissingBean(SecurityFilterChain.class)
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    SecurityFilterChain argusDefaultSecurityFilterChain(
+            final HttpSecurity http,
+            final ArgusAuthenticationFilter authenticationFilter,
+            final ArgusAuthenticationEntryPoint authenticationEntryPoint,
+            final ArgusAccessDeniedHandler accessDeniedHandler,
+            final ObjectProvider<ArgusSecurityCustomizer> customizerProvider) throws Exception
+    {
+        http.csrf(AbstractHttpConfigurer::disable)
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .exceptionHandling(exceptions -> exceptions
+                    .authenticationEntryPoint(authenticationEntryPoint)
+                    .accessDeniedHandler(accessDeniedHandler));
+
+        customizerProvider.getIfAvailable(ArgusSecurityCustomizer::noOp).customize(http);
+
+        http.authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated());
+
+        return http.build();
     }
 }

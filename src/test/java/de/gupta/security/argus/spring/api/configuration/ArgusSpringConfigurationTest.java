@@ -84,7 +84,13 @@ final class ArgusSpringConfigurationTest
                                                 assertThat(context).hasSingleBean(AuthenticatorConfiguration.class);
                                                 assertThat(context).hasSingleBean(Authenticator.class);
                                                 assertThat(context).hasSingleBean(ArgusAuthenticationFilter.class);
-                                            })))
+                                            })),
+                            new ContextCase("when a customizer bean is present it is registered in the context",
+                                    runner -> runner.withBean(Authenticator.class,
+                                                    () -> TestAuthenticators.directAuthenticator(new AtomicLong(3L)))
+                                            .withBean(ArgusSecurityCustomizer.class,
+                                                    ArgusSecurityCustomizer::noOp)
+                                            .run(context -> assertThat(context).hasSingleBean(ArgusSecurityCustomizer.class))))
                     .map(Arguments::of);
         }
     }

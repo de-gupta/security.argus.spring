@@ -1,6 +1,7 @@
 package de.gupta.security.argus.spring.api.authentication;
 
 import de.gupta.security.argus.api.authentication.Authenticator;
+import de.gupta.security.argus.spring.api.configuration.ArgusSecurityCustomizer;
 import de.gupta.security.argus.spring.api.context.ArgusSecurityContextQueryManager;
 import de.gupta.security.argus.spring.api.method.EnableArgusMethodSecurity;
 import de.gupta.security.argus.spring.api.method.RequireAnyRole;
@@ -19,11 +20,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.stereotype.Service;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -146,21 +142,11 @@ final class ArgusSpringSecurityIntegrationTest
         }
 
         @Bean
-        SecurityFilterChain securityFilterChain(final HttpSecurity http,
-                                                final ArgusAuthenticationFilter argusAuthenticationFilter,
-                                                final ArgusAuthenticationEntryPoint authenticationEntryPoint,
-                                                final ArgusAccessDeniedHandler accessDeniedHandler)
-                throws Exception
+        ArgusSecurityCustomizer argusSecurityCustomizer()
         {
-            return http.csrf(AbstractHttpConfigurer::disable)
-                       .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                       .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationEntryPoint)
-                                                                 .accessDeniedHandler(accessDeniedHandler))
-                       .authorizeHttpRequests(authorize -> authorize.requestMatchers("/public/**").permitAll()
-                                                                    .anyRequest()
-                                                                    .authenticated())
-                       .addFilterBefore(argusAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                       .build();
+            return http -> http.authorizeHttpRequests(
+                    authorize -> authorize.requestMatchers("/public/**").permitAll()
+            );
         }
 
         @RestController
