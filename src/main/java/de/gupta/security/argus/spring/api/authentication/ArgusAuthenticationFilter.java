@@ -29,7 +29,6 @@ public final class ArgusAuthenticationFilter extends OncePerRequestFilter
                                     final FilterChain filterChain)
             throws ServletException, IOException
     {
-        // TODO: the whole method should be an Unfolding/Fallible chain
         if (securityContextPopulated())
         {
             filterChain.doFilter(request, response);

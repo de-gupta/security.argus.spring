@@ -3,6 +3,7 @@ package de.gupta.security.argus.spring.api.configuration;
 import de.gupta.security.argus.api.authentication.Authenticator;
 import de.gupta.security.argus.api.authentication.AuthenticatorConfiguration;
 import de.gupta.security.argus.api.authentication.AuthenticatorFactory;
+import de.gupta.security.argus.api.cache.TokenAuthenticationCache;
 import de.gupta.security.argus.api.identity.IdentityMappingConfiguration;
 import de.gupta.security.argus.api.token.AuthenticatedTokenContract;
 import de.gupta.security.argus.api.token.AuthenticatedTokenMintingConfiguration;
@@ -46,14 +47,16 @@ public class ArgusSpringConfiguration
             final AuthenticatedTokenMintingConfiguration authenticatedTokenMintingConfiguration,
             final AuthenticatedTokenVerificationConfiguration authenticatedTokenVerificationConfiguration,
             final IdentityMappingConfiguration<?, ?> identityMappingConfiguration,
-            final ObjectProvider<Clock> clockProvider)
+            final ObjectProvider<Clock> clockProvider,
+            final ObjectProvider<TokenAuthenticationCache> cacheProvider)
     {
         return AuthenticatorConfiguration.of(upstreamTrustConfiguration,
                 authenticatedTokenContract,
                 authenticatedTokenMintingConfiguration,
                 authenticatedTokenVerificationConfiguration,
                 identityMappingConfiguration,
-                clockProvider.getIfAvailable(Clock::systemUTC));
+                clockProvider.getIfAvailable(Clock::systemUTC),
+                cacheProvider.getIfAvailable(TokenAuthenticationCache::noOp));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

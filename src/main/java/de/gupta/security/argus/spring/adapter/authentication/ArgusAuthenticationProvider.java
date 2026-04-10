@@ -32,7 +32,6 @@ public final class ArgusAuthenticationProvider implements AuthenticationProvider
 	@Override
 	public Authentication authenticate(final Authentication authentication) throws AuthenticationException
 	{
-		// TODO: good candidate for functional Unfolding/Fallible chain
 		if (!(authentication instanceof ArgusAuthenticationToken tokenRequest) || !(tokenRequest.getCredentials() instanceof String rawToken))
 		{
 			return null;
