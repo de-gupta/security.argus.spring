@@ -36,7 +36,7 @@ public final class ArgusAuthenticationFilter extends OncePerRequestFilter
         }
 
         final Authentication authenticationRequest = Unfolding.beckon(authenticationConverter.convert(request))
-                                                                .ordain((Authentication) null);
+                                                                .infuse((Authentication) null);
         if (authenticationRequest == null)
         {
             filterChain.doFilter(request, response);
