@@ -16,10 +16,10 @@
     <url>https://github.com/de-gupta/security.argus.spring.git</url>
 
     <properties>
-        <spring.boot.version>3.5.13</spring.boot.version>
-        <security.argus.version>0.2.0</security.argus.version>
+        <security.dependencies.bom.version>1.0.0</security.dependencies.bom.version>
+        <security.argus.version>1.0.0</security.argus.version>
 
-        <security.dependencies.bom.version>0.2.3</security.dependencies.bom.version>
+        <spring.boot.version>3.5.13</spring.boot.version>
     </properties>
 
     <dependencyManagement>
