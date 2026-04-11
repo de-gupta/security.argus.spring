@@ -74,7 +74,7 @@ public final class ArgusPropertiesAssembler
 		if (upstream.hmacSecret() == null || upstream.hmacSecret().isBlank())
 		{
 			throw new IllegalStateException(
-					"argus.upstream.hmac-secret must be configured for HMAC upstream token verification");
+					"argus.upstream.hmac-secret is required — property-based assembly only supports HMAC upstream tokens");
 		}
 
 		final TokenTrustPolicy policy = TokenTrustPolicy.of(
@@ -103,7 +103,7 @@ public final class ArgusPropertiesAssembler
 		if (internal.hmacSecret() == null || internal.hmacSecret().isBlank())
 		{
 			throw new IllegalStateException(
-					"argus.internal.hmac-secret must be configured for HMAC internal token signing");
+					"argus.internal.hmac-secret is required — property-based assembly only supports HMAC internal token signing");
 		}
 		return AuthenticatedTokenMintingConfiguration.of(TokenSignerConfiguration.Hmac.of(internal.hmacSecret()));
 	}

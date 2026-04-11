@@ -9,7 +9,7 @@ import java.lang.annotation.Target;
 
 @Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
-@PreAuthorize("hasRole('{value}')")
+@PreAuthorize("@argusMethodAccess.hasRole('{value}')")
 public @interface RequireRole
 {
     String value();

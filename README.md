@@ -219,13 +219,16 @@ ToLongFunction<User> argusUserTokenVersionResolverFunction()
 Enables result caching to avoid running the full pipeline on every request. Disabled by
 default. See `security.argus` documentation for caching behaviour and TTL semantics.
 
+The cache implementation is provided by `security.argus`:
+
 ```java
+import de.gupta.security.argus.api.cache.AuthenticationCacheConfiguration;
+import de.gupta.security.argus.api.cache.TokenAuthenticationCache;
 
 @Bean
 TokenAuthenticationCache tokenAuthenticationCache()
 {
-	return CaffeineTokenAuthenticationCache.create(
-			AuthenticationCacheConfiguration.withDefaults());
+    return AuthenticationCacheConfiguration.withDefaults().build();
 }
 ```
 
@@ -242,32 +245,36 @@ Clock clock()
 }
 ```
 
-### Authentication entry point
+### Authentication entry point and access denied handler
 
-Called when a request is rejected with 401. Defaults to sending HTTP 401 with no body.
+The default entry point sends HTTP 401 with no body on unauthenticated requests.
+The default denied handler sends HTTP 403 with no body on authorization failures.
+
+Both `ArgusAuthenticationEntryPoint` and `ArgusAccessDeniedHandler` are `final` —
+they cannot be subclassed. To replace them entirely, declare your own `SecurityFilterChain`
+bean and wire your own implementations directly:
 
 ```java
-
 @Bean
-ArgusAuthenticationEntryPoint argusAuthenticationEntryPoint()
+@Order(ArgusFilterChainOrder.DEFAULT - 1)
+SecurityFilterChain myChain(final HttpSecurity http,
+                            final ArgusAuthenticationFilter filter) throws Exception
 {
-	return new MyCustomEntryPoint();
+	return http.csrf(AbstractHttpConfigurer::disable)
+	           .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+	           .exceptionHandling(e -> e
+					   .authenticationEntryPoint(new MyAuthenticationEntryPoint())
+			           .accessDeniedHandler(new MyAccessDeniedHandler()))
+	           .authorizeHttpRequests(a -> a.anyRequest().authenticated())
+	           .addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class)
+	           .build();
 }
 ```
 
-### Access denied handler
-
-Called when an authenticated request is rejected with 403. Defaults to sending HTTP 403
-with no body.
-
-```java
-
-@Bean
-ArgusAccessDeniedHandler argusAccessDeniedHandler()
-{
-	return new MyCustomAccessDeniedHandler();
-}
-```
+`MyAuthenticationEntryPoint` must implement
+`org.springframework.security.web.AuthenticationEntryPoint` and
+`MyAccessDeniedHandler` must implement
+`org.springframework.security.web.access.AccessDeniedHandler`.
 
 ### Filter chain customiser
 

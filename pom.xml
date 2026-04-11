@@ -5,7 +5,7 @@
     <parent>
         <groupId>io.github.de-gupta</groupId>
         <artifactId>security.parent</artifactId>
-        <version>0.1.0</version>
+        <version>1.0.0</version>
     </parent>
 
     <artifactId>security.argus.spring</artifactId>
@@ -17,7 +17,7 @@
 
     <properties>
         <security.dependencies.bom.version>1.0.0</security.dependencies.bom.version>
-        <security.argus.version>1.0.0</security.argus.version>
+        <security.argus.version>1.0.1-SNAPSHOT</security.argus.version>
 
         <spring.boot.version>3.5.13</spring.boot.version>
     </properties>
