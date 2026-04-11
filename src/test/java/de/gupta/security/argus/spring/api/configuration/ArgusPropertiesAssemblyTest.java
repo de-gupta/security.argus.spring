@@ -23,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.time.Clock;
@@ -53,7 +54,9 @@ final class ArgusPropertiesAssemblyTest
 
 	private ApplicationContextRunner baseRunner()
 	{
-		return new ApplicationContextRunner().withUserConfiguration(ArgusSpringConfiguration.class);
+		return new ApplicationContextRunner()
+				.withUserConfiguration(ArgusSpringConfiguration.class)
+				.withConfiguration(AutoConfigurations.of(ArgusAuthenticatorAdapterConfiguration.class));
 	}
 
 	/**

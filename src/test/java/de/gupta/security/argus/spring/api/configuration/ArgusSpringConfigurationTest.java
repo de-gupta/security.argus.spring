@@ -16,6 +16,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -97,6 +98,8 @@ final class ArgusSpringConfigurationTest
 
     private ApplicationContextRunner baseRunner()
     {
-        return new ApplicationContextRunner().withUserConfiguration(ArgusSpringConfiguration.class);
+		return new ApplicationContextRunner()
+				.withUserConfiguration(ArgusSpringConfiguration.class)
+			    .withConfiguration(AutoConfigurations.of(ArgusAuthenticatorAdapterConfiguration.class));
     }
 }
