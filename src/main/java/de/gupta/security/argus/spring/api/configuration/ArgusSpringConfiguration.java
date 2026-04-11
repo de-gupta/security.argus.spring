@@ -45,6 +45,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import java.time.Clock;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.ToLongFunction;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(ArgusProperties.class)
@@ -74,6 +75,26 @@ public class ArgusSpringConfiguration
 			@Qualifier("argusVersionResolverFunction") final Function<String, Long> function)
 	{
 		return function::apply;
+	}
+
+	@Bean(name = "argusManagedLocalSubjectResolver")
+	@ConditionalOnMissingBean(LocalSubjectResolver.class)
+	@ConditionalOnBean(name = "argusLocalSubjectResolverFunction")
+	@SuppressWarnings("unchecked")
+	LocalSubjectResolver<?> argusManagedLocalSubjectResolver(
+			@Qualifier("argusLocalSubjectResolverFunction") final Function<?, String> function)
+	{
+		return user -> ((Function<Object, String>) function).apply(user);
+	}
+
+	@Bean(name = "argusManagedUserTokenVersionResolver")
+	@ConditionalOnMissingBean(UserTokenVersionResolver.class)
+	@ConditionalOnBean(name = "argusUserTokenVersionResolverFunction")
+	@SuppressWarnings("unchecked")
+	UserTokenVersionResolver<?> argusManagedUserTokenVersionResolver(
+			@Qualifier("argusUserTokenVersionResolverFunction") final ToLongFunction<?> function)
+	{
+		return user -> ((ToLongFunction<Object>) function).applyAsLong(user);
 	}
 
 	// -------------------------------------------------------------------------

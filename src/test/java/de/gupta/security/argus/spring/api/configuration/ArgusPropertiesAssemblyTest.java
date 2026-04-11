@@ -36,6 +36,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
+import java.util.function.ToLongFunction;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -628,6 +629,129 @@ final class ArgusPropertiesAssemblyTest
 																				   "external-user"));
 
 						assertThat(result).isInstanceOf(InvalidCredential.class);
+					});
+		}
+	}
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// Optional resolver Function beans override defaults (named-function path)
+	// ─────────────────────────────────────────────────────────────────────────
+
+	@Nested
+	@DisplayName("optional resolver Function bean adapters")
+	final class OptionalResolverFunctionBeans
+	{
+		// ── LocalSubjectResolver ──
+
+		@Test
+		void shouldUseLocalSubjectResolverFunctionBeanWhenNoTypedBeanIsPresent()
+		{
+			runnerWithMinimalProperties()
+					.withBean("argusLocalSubjectResolverFunction", Function.class,
+							() -> (Function<String, String>) user -> "fn::" + user)
+					.withBean(UserTokenVersionResolver.class,
+							() -> (UserTokenVersionResolver<String>) _ -> 3L)
+					.run(context ->
+					{
+						final AuthenticationResult result = context.getBean(Authenticator.class)
+						                                           .authenticate(
+																		   TestAuthenticators.token("external-user"));
+
+						assertThat(result).isInstanceOf(AuthenticationSuccess.class);
+						assertThat(((AuthenticationSuccess) result).identity().subject())
+								.isEqualTo("fn::external-user");
+					});
+		}
+
+		@Test
+		void shouldPreferLocalSubjectResolverTypedBeanOverFunctionBean()
+		{
+			final AtomicInteger functionCallCount = new AtomicInteger();
+
+			runnerWithMinimalProperties()
+					.withBean(LocalSubjectResolver.class,
+							() -> (LocalSubjectResolver<String>) user -> "typed::" + user)
+					.withBean("argusLocalSubjectResolverFunction", Function.class,
+							() -> (Function<String, String>) user ->
+							{
+								functionCallCount.incrementAndGet();
+								return "fn::" + user;
+							})
+					.withBean(UserTokenVersionResolver.class,
+							() -> (UserTokenVersionResolver<String>) _ -> 3L)
+					.run(context ->
+					{
+						final AuthenticationResult result = context.getBean(Authenticator.class)
+						                                           .authenticate(
+																		   TestAuthenticators.token("external-user"));
+
+						assertThat(result).isInstanceOf(AuthenticationSuccess.class);
+						assertThat(((AuthenticationSuccess) result).identity().subject())
+								.isEqualTo("typed::external-user");
+						assertThat(functionCallCount).hasValue(0);
+					});
+		}
+
+		// ── UserTokenVersionResolver ──
+
+		@Test
+		void shouldUseUserTokenVersionResolverFunctionBeanWhenNoTypedBeanIsPresent()
+		{
+			// ToLongFunction returns 3L (matching current version 3L from ArgusVersionResolver) → success
+			runnerWithMinimalProperties()
+					.withBean("argusUserTokenVersionResolverFunction", ToLongFunction.class,
+							() -> (ToLongFunction<String>) _ -> 3L)
+					.run(context ->
+					{
+						final AuthenticationResult result = context.getBean(Authenticator.class)
+						                                           .authenticate(
+																		   TestAuthenticators.token("external-user"));
+
+						assertThat(result).isInstanceOf(AuthenticationSuccess.class);
+					});
+		}
+
+		@Test
+		void shouldProduceNotCurrentWhenUserTokenVersionResolverFunctionReturnsMismatch()
+		{
+			// ToLongFunction returns 99L (minted), current version is 3L → NotCurrent
+			runnerWithMinimalProperties()
+					.withBean("argusUserTokenVersionResolverFunction", ToLongFunction.class,
+							() -> (ToLongFunction<String>) _ -> 99L)
+					.run(context ->
+					{
+						final AuthenticationResult result = context.getBean(Authenticator.class)
+						                                           .authenticate(
+																		   TestAuthenticators.token("external-user"));
+
+						assertThat(result).isInstanceOf(AuthenticationNotCurrent.class);
+					});
+		}
+
+		@Test
+		void shouldPreferUserTokenVersionResolverTypedBeanOverFunctionBean()
+		{
+			final AtomicInteger functionCallCount = new AtomicInteger();
+
+			// Typed bean returns 3L (matches current) → success.
+			// ToLongFunction returns 99L (would cause NotCurrent), but it must never be called.
+			runnerWithMinimalProperties()
+					.withBean(UserTokenVersionResolver.class,
+							() -> (UserTokenVersionResolver<String>) _ -> 3L)
+					.withBean("argusUserTokenVersionResolverFunction", ToLongFunction.class,
+							() -> (ToLongFunction<String>) _ ->
+							{
+								functionCallCount.incrementAndGet();
+								return 99L;
+							})
+					.run(context ->
+					{
+						final AuthenticationResult result = context.getBean(Authenticator.class)
+						                                           .authenticate(
+																		   TestAuthenticators.token("external-user"));
+
+						assertThat(result).isInstanceOf(AuthenticationSuccess.class);
+						assertThat(functionCallCount).hasValue(0);
 					});
 		}
 	}

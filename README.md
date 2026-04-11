@@ -156,6 +156,8 @@ Maps your `User` to the subject string written into the minted token. The defaul
 `String.valueOf(user)`. Provide this bean if your user type does not have a useful
 `toString()`.
 
+**Option A — implement `LocalSubjectResolver<User>`:**
+
 ```java
 
 @Bean
@@ -165,7 +167,19 @@ LocalSubjectResolver<User> localSubjectResolver()
 }
 ```
 
-`LocalSubjectResolver<User>` is from `de.gupta.security.argus.api.identity`.
+**Option B — provide a `Function<User, String>` bean named `argusLocalSubjectResolverFunction`:**
+
+```java
+
+@Bean
+Function<User, String> argusLocalSubjectResolverFunction()
+{
+	return User::id;
+}
+```
+
+`LocalSubjectResolver<User>` is from `de.gupta.security.argus.api.identity`. If a typed
+`LocalSubjectResolver` bean is present, the named function bean is ignored.
 
 ### User token version resolver
 
@@ -173,6 +187,8 @@ Resolves the version value to embed in the minted token at the time of minting. 
 distinct from the version resolver (which is checked on every request). The default returns
 `1L`. Provide this bean if the version in newly minted tokens should reflect the current
 stored value.
+
+**Option A — implement `UserTokenVersionResolver<User>`:**
 
 ```java
 
@@ -183,7 +199,20 @@ UserTokenVersionResolver<User> userTokenVersionResolver()
 }
 ```
 
-`UserTokenVersionResolver<User>` is from `de.gupta.security.argus.api.identity`.
+**Option B — provide a `ToLongFunction<User>` bean named `argusUserTokenVersionResolverFunction`:**
+
+```java
+
+@Bean
+ToLongFunction<User> argusUserTokenVersionResolverFunction()
+{
+	return User::tokenVersion;
+}
+```
+
+`ToLongFunction<User>` is from `java.util.function` — it avoids boxing the returned `long`.
+`UserTokenVersionResolver<User>` is from `de.gupta.security.argus.api.identity`. If a typed
+`UserTokenVersionResolver` bean is present, the named function bean is ignored.
 
 ### Token authentication cache
 
