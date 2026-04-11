@@ -2,70 +2,248 @@
 
 `security.argus.spring` adapts `security.argus` into Spring Security.
 
-It provides:
-- bearer-token authentication against Argus
-- Spring `SecurityContext` population on successful authentication
-- Spring `AuthenticationProvider`, filter, entry point, and denied handler beans
-- a default stateless `SecurityFilterChain` with sensible defaults
-- a small business-friendly context bean
-- standard `@PreAuthorize` support and Argus-flavored method-security annotations
+It wires bearer-token authentication, a stateless filter chain, Spring Security context
+integration, and method-level authorization annotations — all driven by Spring beans and
+`application.properties`.
 
-## What You Provide
+## Getting Started
 
-You can use it in two ways.
-
-### 1. Direct Argus mode
-Provide an `Authenticator` bean yourself.
-
-### 2. Argus assembly mode
-Provide the Argus ingredient beans:
-- `UpstreamTrustConfiguration`
-- `AuthenticatedTokenContract`
-- `AuthenticatedTokenMintingConfiguration`
-- `AuthenticatedTokenVerificationConfiguration`
-- `IdentityMappingConfiguration<?, ?>`
-- optional `Clock`
-- optional `TokenAuthenticationCache`
-
-The library will assemble the `Authenticator` for you.
-
-## What You Get
-
-The library exposes Spring beans for:
-- `ArgusAuthenticationFilter`
-- `AuthenticationManager`
-- `ArgusAuthenticationProvider`
-- `ArgusAuthenticationEntryPoint`
-- `ArgusAccessDeniedHandler`
-- `ArgusSecurityContextQueryManager`
-- `argusMethodAccess`
-- a default `SecurityFilterChain` (stateless, CSRF disabled, all endpoints require authentication)
-
-## Zero-Configuration Usage
-
-If you provide an `Authenticator` bean (or the ingredient beans), the library wires everything
-automatically. All endpoints require authentication by default.
+Add `@EnableArgusMethodSecurity` to any `@Configuration` class in your application. This
+imports the Argus Spring configuration.
 
 ```java
 @Configuration
 @EnableArgusMethodSecurity
 class SecurityConfiguration
 {
-    @Bean
-    Authenticator authenticator()
-    {
-        return AuthenticatorFactory.create(authenticatorConfiguration());
-    }
 }
 ```
 
-That is the entire security configuration. No `SecurityFilterChain` bean needed.
+From there, provide the beans and properties described below. The library will assemble the
+rest.
 
-## Customising The Default Filter Chain
+---
 
-To permit specific paths or add other customisations without replacing the entire chain,
-provide an `ArgusSecurityCustomizer` bean. It is applied before the catch-all
-`anyRequest().authenticated()` rule, so permit-list matchers take precedence.
+## Configuration Properties
+
+All properties are under the `argus` prefix.
+
+### Upstream token verification
+
+These properties control how Argus trusts incoming tokens from your identity provider.
+
+| Property                         | Required | Default | Description                                   |
+|----------------------------------|----------|---------|-----------------------------------------------|
+| `argus.upstream.hmac-secret`     | yes*     | —       | HMAC secret used to verify upstream tokens    |
+| `argus.upstream.issuer`          | no       | —       | Expected issuer claim value                   |
+| `argus.upstream.audiences`       | no       | empty   | Expected audience claim values                |
+| `argus.upstream.clock-skew`      | no       | `PT0S`  | Tolerance for clock differences, e.g. `PT30S` |
+| `argus.upstream.require-subject` | no       | `true`  | Whether a `sub` claim is required             |
+
+*Required when using HMAC upstream token verification. RSA and EC upstream trust is configured
+via beans — see the [Explicit bean configuration](#explicit-bean-configuration) section.
+
+### Internal token contract
+
+These properties control the tokens Argus mints internally after verifying the upstream token.
+
+| Property                                    | Required | Default        | Description                             |
+|---------------------------------------------|----------|----------------|-----------------------------------------|
+| `argus.internal.hmac-secret`                | yes*     | —              | HMAC secret for signing internal tokens |
+| `argus.internal.issuer`                     | no       | `argus`        | Issuer claim in minted tokens           |
+| `argus.internal.audiences`                  | no       | empty          | Audience claims in minted tokens        |
+| `argus.internal.token-ttl`                  | no       | `PT15M`        | Time-to-live for minted tokens          |
+| `argus.internal.role-claim-name`            | no       | `roles`        | JWT claim name for roles                |
+| `argus.internal.version-claim-name`         | no       | `ver`          | JWT claim name for version              |
+| `argus.internal.upstream-issuer-claim-name` | no       | `upstream_iss` | JWT claim name for the upstream issuer  |
+
+*Required when using HMAC internal token signing.
+
+---
+
+## Required Beans
+
+Two beans must be provided regardless of the configuration path chosen.
+
+### User resolver
+
+Resolves a local application user from the upstream token's subject (or a configured claim).
+Return `Optional.empty()` to reject authentication when the user cannot be found.
+
+**Option A — implement `ArgusUserResolver<User>`:**
+
+```java
+
+@Bean
+ArgusUserResolver<User> userResolver(UserRepository users)
+{
+	return externalId -> users.findByExternalId(externalId);
+}
+```
+
+**Option B — provide a `Function<String, Optional<User>>` bean named `argusUserResolverFunction`:**
+
+```java
+
+@Bean
+Function<String, Optional<User>> argusUserResolverFunction(UserRepository users)
+{
+	return users::findByExternalId;
+}
+```
+
+If an `ArgusUserResolver` bean is present, the named function bean is ignored.
+
+### Version resolver
+
+Resolves the current token version for an authenticated subject. Argus checks this on every
+request: if the version in the token does not match the value returned here, the request is
+rejected as stale. Incrementing the stored version invalidates all existing tokens for that
+subject without a denylist.
+
+**Option A — implement `ArgusVersionResolver`:**
+
+```java
+
+@Bean
+ArgusVersionResolver versionResolver(UserRepository users)
+{
+	return subject -> users.findBySubject(subject)
+	                       .map(User::tokenVersion)
+	                       .orElse(0L);
+}
+```
+
+**Option B — provide a `Function<String, Long>` bean named `argusVersionResolverFunction`:**
+
+```java
+
+@Bean
+Function<String, Long> argusVersionResolverFunction(UserRepository users)
+{
+	return subject -> users.currentTokenVersion(subject);
+}
+```
+
+If an `ArgusVersionResolver` bean is present, the named function bean is ignored.
+
+---
+
+## Optional Override Beans
+
+The following beans are created automatically with sensible defaults. Provide your own bean
+of the same type to replace the default.
+
+### Role resolver
+
+Controls which roles are included in the minted token. The default includes no roles — you
+must provide this bean to have roles in your tokens.
+
+```java
+
+@Bean
+RoleResolver<User> roleResolver()
+{
+	return user -> user.roles();
+}
+```
+
+`RoleResolver<User>` is from `de.gupta.security.argus.api.identity`.
+
+### Local subject resolver
+
+Maps your `User` to the subject string written into the minted token. The default uses
+`String.valueOf(user)`. Provide this bean if your user type does not have a useful
+`toString()`.
+
+```java
+
+@Bean
+LocalSubjectResolver<User> localSubjectResolver()
+{
+	return user -> user.id();
+}
+```
+
+`LocalSubjectResolver<User>` is from `de.gupta.security.argus.api.identity`.
+
+### User token version resolver
+
+Resolves the version value to embed in the minted token at the time of minting. This is
+distinct from the version resolver (which is checked on every request). The default returns
+`1L`. Provide this bean if the version in newly minted tokens should reflect the current
+stored value.
+
+```java
+
+@Bean
+UserTokenVersionResolver<User> userTokenVersionResolver()
+{
+	return user -> user.tokenVersion();
+}
+```
+
+`UserTokenVersionResolver<User>` is from `de.gupta.security.argus.api.identity`.
+
+### Token authentication cache
+
+Enables result caching to avoid running the full pipeline on every request. Disabled by
+default. See `security.argus` documentation for caching behaviour and TTL semantics.
+
+```java
+
+@Bean
+TokenAuthenticationCache tokenAuthenticationCache()
+{
+	return CaffeineTokenAuthenticationCache.create(
+			AuthenticationCacheConfiguration.withDefaults());
+}
+```
+
+### Clock
+
+Used for all time-sensitive operations. Defaults to `Clock.systemUTC()`. Useful for testing.
+
+```java
+
+@Bean
+Clock clock()
+{
+	return Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
+}
+```
+
+### Authentication entry point
+
+Called when a request is rejected with 401. Defaults to sending HTTP 401 with no body.
+
+```java
+
+@Bean
+ArgusAuthenticationEntryPoint argusAuthenticationEntryPoint()
+{
+	return new MyCustomEntryPoint();
+}
+```
+
+### Access denied handler
+
+Called when an authenticated request is rejected with 403. Defaults to sending HTTP 403
+with no body.
+
+```java
+
+@Bean
+ArgusAccessDeniedHandler argusAccessDeniedHandler()
+{
+	return new MyCustomAccessDeniedHandler();
+}
+```
+
+### Filter chain customiser
+
+Applied to `HttpSecurity` before the catch-all `anyRequest().authenticated()` rule. Use this
+to permit specific paths without replacing the entire filter chain.
 
 ```java
 @Bean
@@ -77,67 +255,134 @@ ArgusSecurityCustomizer argusSecurityCustomizer()
 }
 ```
 
-## Replacing The Default Filter Chain
+---
 
-To take full control, declare your own `SecurityFilterChain` bean. The library's default chain
-is annotated `@ConditionalOnMissingBean(SecurityFilterChain.class)` and steps aside entirely.
-Use `ArgusFilterChainOrder.DEFAULT` to position your chain relative to the default if you need
-multiple chains.
+## Replacing the Default Filter Chain
+
+The default filter chain is `@ConditionalOnMissingBean(SecurityFilterChain.class)`. Declare
+your own `SecurityFilterChain` bean to replace it entirely. Use `ArgusFilterChainOrder.DEFAULT`
+to position your chain relative to the default.
 
 ```java
 @Bean
 @Order(ArgusFilterChainOrder.DEFAULT - 1)
-SecurityFilterChain myChain(final HttpSecurity http,
-                            final ArgusAuthenticationFilter argusAuthenticationFilter,
-                            final ArgusAuthenticationEntryPoint authenticationEntryPoint,
-                            final ArgusAccessDeniedHandler accessDeniedHandler) throws Exception
+SecurityFilterChain securityFilterChain(final HttpSecurity http,
+                                        final ArgusAuthenticationFilter filter,
+                                        final ArgusAuthenticationEntryPoint entryPoint,
+                                        final ArgusAccessDeniedHandler deniedHandler) throws Exception
 {
     return http.csrf(AbstractHttpConfigurer::disable)
-               .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-               .exceptionHandling(exceptions -> exceptions
-                       .authenticationEntryPoint(authenticationEntryPoint)
-                       .accessDeniedHandler(accessDeniedHandler))
-               .authorizeHttpRequests(authorize -> authorize
+               .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+               .exceptionHandling(e -> e
+					   .authenticationEntryPoint(entryPoint)
+		               .accessDeniedHandler(deniedHandler))
+               .authorizeHttpRequests(a -> a
                        .requestMatchers("/public/**").permitAll()
                        .anyRequest().authenticated())
-               .addFilterBefore(argusAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+               .addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class)
                .build();
 }
 ```
 
-## Controller Example
+---
 
-Using the custom Argus annotation:
+## Explicit Bean Configuration
+
+For full control over trust configuration (RSA, EC keys, custom audiences, per-environment
+policies), provide the argus domain beans directly instead of using properties. This path
+activates when all five beans below are present and no `Authenticator` or
+`AuthenticatorConfiguration` bean exists.
+
+```java
+
+@Bean
+UpstreamTrustConfiguration upstreamTrustConfiguration()
+{ ...}
+
+@Bean
+AuthenticatedTokenContract authenticatedTokenContract()
+{ ...}
+
+@Bean
+AuthenticatedTokenMintingConfiguration authenticatedTokenMintingConfiguration()
+{ ...}
+
+@Bean
+AuthenticatedTokenVerificationConfiguration authenticatedTokenVerificationConfiguration()
+{ ...}
+
+@Bean
+IdentityMappingConfiguration<?, ?> identityMappingConfiguration()
+{ ...}
+```
+
+---
+
+## Full Control
+
+Provide an `Authenticator` bean to bypass all assembly entirely. The library still contributes
+the filter chain, Spring Security integration, and method security beans.
+
+```java
+
+@Bean
+Authenticator authenticator()
+{
+	return AuthenticatorFactory.create(
+			AuthenticatorConfiguration.<String, User>builder()
+			                          .upstreamTrustConfiguration(...)
+                    .authenticatedTokenContract(...)
+                    .authenticatedTokenMintingConfiguration(...)
+                    .authenticatedTokenVerificationConfiguration(...)
+                    .identityMappingConfiguration(...)
+                    .build());
+}
+```
+
+---
+
+## Method Security
 
 ```java
 @RestController
-class AdminController
+class ExampleController
 {
-    @GetMapping("/admin/reports")
+	@GetMapping("/me")
+	@RequireAuthenticated
+	String me()
+	{
+		return "authenticated";
+	}
+
+	@GetMapping("/admin")
     @RequireRole("ADMIN")
-    String reports()
-    {
-        return "restricted";
-    }
+	String admin()
+	{
+		return "restricted to ADMIN";
+	}
+
+	@GetMapping("/staff")
+	@RequireAnyRole({"ADMIN", "SUPPORT"})
+	String staff()
+	{
+		return "restricted to ADMIN or SUPPORT";
+	}
 }
 ```
 
-Using standard Spring Security annotations also works because Argus roles are mapped into Spring authorities:
+Standard Spring Security annotations also work, as Argus roles are mapped to Spring
+`GrantedAuthority` values:
 
 ```java
-@RestController
-class AdminController
-{
-    @GetMapping("/admin/reports")
-    @PreAuthorize("hasRole('ADMIN')")
-    String reports()
-    {
-        return "restricted";
-    }
-}
+@PreAuthorize("hasRole('ADMIN')")
 ```
 
-## Reading The Current Identity
+---
+
+## Reading the Current Identity
+
+Inject `ArgusSecurityContextQueryManager` to query the authenticated identity within a
+request without depending on Spring Security types directly.
 
 ```java
 @Service
@@ -145,34 +390,19 @@ class CurrentUserService
 {
     private final ArgusSecurityContextQueryManager securityContextQueryManager;
 
-    CurrentUserService(final ArgusSecurityContextQueryManager securityContextQueryManager)
+	Optional<String> currentSubject()
     {
-        this.securityContextQueryManager = securityContextQueryManager;
-    }
-
-    String currentSubject()
-    {
-        return securityContextQueryManager.subject().orElseThrow();
+		return securityContextQueryManager.subject();
     }
 
     boolean isAdmin()
     {
         return securityContextQueryManager.hasRole("ADMIN");
     }
+
+	Set<String> currentRoles()
+	{
+		return securityContextQueryManager.roles();
+	}
 }
 ```
-
-## Caching
-
-If you provide a `TokenAuthenticationCache` bean, `argus.spring` picks it up automatically and
-passes it into the assembled `AuthenticatorConfiguration`. No other changes are needed.
-
-```java
-@Bean
-TokenAuthenticationCache tokenAuthenticationCache()
-{
-    return CaffeineTokenAuthenticationCache.create(AuthenticationCacheConfiguration.withDefaults());
-}
-```
-
-See the `security.argus` README for full caching documentation.
