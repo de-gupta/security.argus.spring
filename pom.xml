@@ -17,7 +17,7 @@
 
     <properties>
         <security.dependencies.bom.version>1.0.0</security.dependencies.bom.version>
-        <security.argus.version>2.0.1-SNAPSHOT</security.argus.version>
+        <security.argus.version>3.0.0</security.argus.version>
 
         <spring.boot.version>3.5.13</spring.boot.version>
     </properties>
