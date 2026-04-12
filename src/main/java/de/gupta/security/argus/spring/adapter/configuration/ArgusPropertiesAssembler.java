@@ -5,7 +5,6 @@ import de.gupta.security.argus.api.cache.TokenAuthenticationCache;
 import de.gupta.security.argus.api.identity.*;
 import de.gupta.security.argus.api.token.AuthenticatedTokenContract;
 import de.gupta.security.argus.api.token.AuthenticatedTokenMintingConfiguration;
-import de.gupta.security.argus.api.token.AuthenticatedTokenVerificationConfiguration;
 import de.gupta.security.argus.api.token.TokenSignerConfiguration;
 import de.gupta.security.argus.api.trust.TokenTrustPolicy;
 import de.gupta.security.argus.api.trust.UpstreamTrustConfiguration;
@@ -26,7 +25,6 @@ public final class ArgusPropertiesAssembler
 	private final ArgusVersionResolver versionResolver;
 	private final ObjectProvider<RoleResolver<?>> roleResolverProvider;
 	private final ObjectProvider<LocalSubjectResolver<?>> localSubjectResolverProvider;
-	private final ObjectProvider<UserTokenVersionResolver<?>> userTokenVersionResolverProvider;
 	private final ObjectProvider<Clock> clockProvider;
 	private final ObjectProvider<TokenAuthenticationCache> cacheProvider;
 
@@ -36,13 +34,11 @@ public final class ArgusPropertiesAssembler
 			final ArgusVersionResolver versionResolver,
 			final ObjectProvider<RoleResolver<?>> roleResolverProvider,
 			final ObjectProvider<LocalSubjectResolver<?>> localSubjectResolverProvider,
-			final ObjectProvider<UserTokenVersionResolver<?>> userTokenVersionResolverProvider,
 			final ObjectProvider<Clock> clockProvider,
 			final ObjectProvider<TokenAuthenticationCache> cacheProvider)
 	{
 		return new ArgusPropertiesAssembler(properties, userResolver, versionResolver,
-				roleResolverProvider, localSubjectResolverProvider, userTokenVersionResolverProvider,
-				clockProvider, cacheProvider);
+				roleResolverProvider, localSubjectResolverProvider, clockProvider, cacheProvider);
 	}
 
 	@SuppressWarnings({"rawtypes", "unchecked"})
@@ -54,16 +50,13 @@ public final class ArgusPropertiesAssembler
 		final UpstreamTrustConfiguration upstreamTrustConfiguration = buildUpstreamTrust(upstream);
 		final AuthenticatedTokenContract contract = buildTokenContract(internal);
 		final AuthenticatedTokenMintingConfiguration minting = buildMinting(internal);
-		final AuthenticatedTokenVerificationConfiguration verification = buildVerification(internal);
 		final IdentityMappingConfiguration<?, ?> identity =
-				buildIdentityMapping((ArgusUserResolver<Object>) userResolver,
-						versionResolver);
+				buildIdentityMapping((ArgusUserResolver<Object>) userResolver, versionResolver);
 
 		return AuthenticatorConfiguration.of(
 				upstreamTrustConfiguration,
 				contract,
 				minting,
-				verification,
 				(IdentityMappingConfiguration) identity,
 				clockProvider.getIfAvailable(Clock::systemUTC),
 				cacheProvider.getIfAvailable(TokenAuthenticationCache::noOp));
@@ -93,7 +86,6 @@ public final class ArgusPropertiesAssembler
 				internal.audiences(),
 				internal.tokenTtl(),
 				internal.roleClaimName(),
-				internal.versionClaimName(),
 				Optional.of(internal.upstreamIssuerClaimName()),
 				true);
 	}
@@ -108,25 +100,18 @@ public final class ArgusPropertiesAssembler
 		return AuthenticatedTokenMintingConfiguration.of(TokenSignerConfiguration.Hmac.of(internal.hmacSecret()));
 	}
 
-	private static AuthenticatedTokenVerificationConfiguration buildVerification(
-			final ArgusProperties.Internal internal)
-	{
-		final TokenTrustPolicy internalPolicy = TokenTrustPolicy.of(
-				Duration.ZERO,
-				true,
-				internal.audiences(),
-				Optional.of(internal.issuer()));
-		return AuthenticatedTokenVerificationConfiguration.of(internalPolicy);
-	}
-
-	@SuppressWarnings({"unchecked"})
+	@SuppressWarnings("unchecked")
 	private <User> IdentityMappingConfiguration<String, User> buildIdentityMapping(
 			final ArgusUserResolver<User> userResolver,
 			final ArgusVersionResolver versionResolver)
 	{
 		final UserResolver<String, User> argusUserResolver = userResolver::resolveUser;
 		final ExternalIdentityAdapter<String> identityAdapter = ExternalIdentityAdapter.stringIdentity();
-		final AuthenticatedSubjectVersionResolver currentVersionResolver = versionResolver::currentVersion;
+		// The properties assembly path uses ExternalIdentityAdapter.stringIdentity(),
+		// which means User = String = external identity. The ArgusVersionResolver also
+		// takes the external identity string. String.valueOf(user) is safe here.
+		final UserRevocationResolver<User> revocationResolver = user -> versionResolver.lastRevokedAt(
+				String.valueOf(user));
 
 		final LocalSubjectResolver<User> localSubjectResolver =
 				(LocalSubjectResolver<User>) localSubjectResolverProvider.getIfAvailable(
@@ -135,16 +120,12 @@ public final class ArgusPropertiesAssembler
 		final RoleResolver<User> roleResolver =
 				(RoleResolver<User>) roleResolverProvider.getIfAvailable(() -> _ -> Set.of());
 
-		final UserTokenVersionResolver<User> versionAtMintResolver =
-				(UserTokenVersionResolver<User>) userTokenVersionResolverProvider.getIfAvailable(() -> _ -> 1L);
-
 		return IdentityMappingConfiguration.of(
 				identityAdapter,
 				argusUserResolver,
 				localSubjectResolver,
 				roleResolver,
-				versionAtMintResolver,
-				currentVersionResolver);
+				revocationResolver);
 	}
 
 	private ArgusPropertiesAssembler(
@@ -153,7 +134,6 @@ public final class ArgusPropertiesAssembler
 			final ArgusVersionResolver versionResolver,
 			final ObjectProvider<RoleResolver<?>> roleResolverProvider,
 			final ObjectProvider<LocalSubjectResolver<?>> localSubjectResolverProvider,
-			final ObjectProvider<UserTokenVersionResolver<?>> userTokenVersionResolverProvider,
 			final ObjectProvider<Clock> clockProvider,
 			final ObjectProvider<TokenAuthenticationCache> cacheProvider)
 	{
@@ -162,7 +142,6 @@ public final class ArgusPropertiesAssembler
 		this.versionResolver = versionResolver;
 		this.roleResolverProvider = roleResolverProvider;
 		this.localSubjectResolverProvider = localSubjectResolverProvider;
-		this.userTokenVersionResolverProvider = userTokenVersionResolverProvider;
 		this.clockProvider = clockProvider;
 		this.cacheProvider = cacheProvider;
 	}

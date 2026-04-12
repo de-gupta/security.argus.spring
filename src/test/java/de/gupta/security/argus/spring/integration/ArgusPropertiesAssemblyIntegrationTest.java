@@ -1,6 +1,5 @@
 package de.gupta.security.argus.spring.integration;
 
-import de.gupta.security.argus.api.identity.UserTokenVersionResolver;
 import de.gupta.security.argus.spring.api.configuration.ArgusSecurityCustomizer;
 import de.gupta.security.argus.spring.api.configuration.ArgusUserResolver;
 import de.gupta.security.argus.spring.api.configuration.ArgusVersionResolver;
@@ -23,6 +22,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 
@@ -79,19 +79,13 @@ final class ArgusPropertiesAssemblyIntegrationTest
 		@Bean
 		ArgusVersionResolver versionResolver()
 		{
-			return _ -> 1L;
+			return _ -> Instant.EPOCH;
 		}
 
 		@Bean
 		Clock clock()
 		{
 			return TestAuthenticators.CLOCK;
-		}
-
-		@Bean
-		UserTokenVersionResolver<String> userTokenVersionResolver()
-		{
-			return _ -> 1L;
 		}
 
 		@Bean

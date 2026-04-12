@@ -25,7 +25,7 @@ import java.util.Set;
  *     hmac-secret: "your-internal-signing-secret" # required for HMAC internal tokens
  *     token-ttl: PT15M                            # default: PT15M
  *     role-claim-name: "roles"                    # default: "roles"
- *     version-claim-name: "ver"                   # default: "ver"
+ *     upstream-issuer-claim-name: "upstream_iss"  # default: "upstream_iss"
  * }</pre>
  */
 @ConfigurationProperties(prefix = "argus")
@@ -37,7 +37,7 @@ public record ArgusProperties(Upstream upstream, Internal internal)
 	{
 		this.upstream = upstream != null ? upstream : new Upstream(null, null, Set.of(), Duration.ZERO, true);
 		this.internal = internal != null ? internal :
-				new Internal("argus", Set.of(), null, Duration.ofMinutes(15), "roles", "ver", "upstream_iss");
+				new Internal("argus", Set.of(), null, Duration.ofMinutes(15), "roles", "upstream_iss");
 	}
 
 	public record Upstream(
@@ -66,7 +66,6 @@ public record ArgusProperties(Upstream upstream, Internal internal)
 			String hmacSecret,
 			@DefaultValue("PT15M") Duration tokenTtl,
 			@DefaultValue("roles") String roleClaimName,
-			@DefaultValue("ver") String versionClaimName,
 			@DefaultValue("upstream_iss") String upstreamIssuerClaimName)
 	{
 		public Internal
@@ -86,10 +85,6 @@ public record ArgusProperties(Upstream upstream, Internal internal)
 			if (roleClaimName == null || roleClaimName.isBlank())
 			{
 				roleClaimName = "roles";
-			}
-			if (versionClaimName == null || versionClaimName.isBlank())
-			{
-				versionClaimName = "ver";
 			}
 			if (upstreamIssuerClaimName == null || upstreamIssuerClaimName.isBlank())
 			{

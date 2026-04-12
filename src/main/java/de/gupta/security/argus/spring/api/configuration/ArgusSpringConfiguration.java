@@ -1,7 +1,6 @@
 package de.gupta.security.argus.spring.api.configuration;
 
 import de.gupta.security.argus.api.identity.LocalSubjectResolver;
-import de.gupta.security.argus.api.identity.UserTokenVersionResolver;
 import de.gupta.security.argus.spring.adapter.context.DefaultArgusSecurityContextQueryManager;
 import de.gupta.security.argus.spring.adapter.method.DefaultArgusMethodAccess;
 import de.gupta.security.argus.spring.api.context.ArgusSecurityContextQueryManager;
@@ -14,9 +13,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.annotation.AnnotationTemplateExpressionDefaults;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.function.ToLongFunction;
 
 /**
  * Core Argus Spring configuration.
@@ -62,7 +61,7 @@ public class ArgusSpringConfiguration
 	@ConditionalOnMissingBean(ArgusVersionResolver.class)
 	@ConditionalOnBean(name = "argusVersionResolverFunction")
 	ArgusVersionResolver argusManagedVersionResolver(
-			@Qualifier("argusVersionResolverFunction") final Function<String, Long> function)
+			@Qualifier("argusVersionResolverFunction") final Function<String, Instant> function)
 	{
 		return function::apply;
 	}
@@ -75,16 +74,6 @@ public class ArgusSpringConfiguration
 			@Qualifier("argusLocalSubjectResolverFunction") final Function<?, String> function)
 	{
 		return user -> ((Function<Object, String>) function).apply(user);
-	}
-
-	@Bean(name = "argusManagedUserTokenVersionResolver")
-	@ConditionalOnMissingBean(UserTokenVersionResolver.class)
-	@ConditionalOnBean(name = "argusUserTokenVersionResolverFunction")
-	@SuppressWarnings("unchecked")
-	UserTokenVersionResolver<?> argusManagedUserTokenVersionResolver(
-			@Qualifier("argusUserTokenVersionResolverFunction") final ToLongFunction<?> function)
-	{
-		return user -> ((ToLongFunction<Object>) function).applyAsLong(user);
 	}
 
 	// -------------------------------------------------------------------------

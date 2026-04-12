@@ -6,10 +6,8 @@ import de.gupta.security.argus.api.cache.TokenAuthenticationCache;
 import de.gupta.security.argus.api.identity.IdentityMappingConfiguration;
 import de.gupta.security.argus.api.identity.LocalSubjectResolver;
 import de.gupta.security.argus.api.identity.RoleResolver;
-import de.gupta.security.argus.api.identity.UserTokenVersionResolver;
 import de.gupta.security.argus.api.token.AuthenticatedTokenContract;
 import de.gupta.security.argus.api.token.AuthenticatedTokenMintingConfiguration;
-import de.gupta.security.argus.api.token.AuthenticatedTokenVerificationConfiguration;
 import de.gupta.security.argus.api.trust.UpstreamTrustConfiguration;
 import de.gupta.security.argus.domain.model.authentication.AuthenticationResult;
 import de.gupta.security.argus.domain.model.authentication.AuthenticationSuccess;
@@ -37,7 +35,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
-import java.util.function.ToLongFunction;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -59,11 +56,16 @@ final class ArgusPropertiesAssemblyTest
 				.withConfiguration(AutoConfigurations.of(ArgusAuthenticatorAdapterConfiguration.class));
 	}
 
+	// Token iat = CLOCK.instant(). NEVER_REVOKED = EPOCH means always current.
+	// REVOKED_AFTER_ISSUANCE = CLOCK.instant() + 1s means token is superseded.
+	private static final Instant NEVER_REVOKED = Instant.EPOCH;
+	private static final Instant REVOKED_AFTER_ISSUANCE = TestAuthenticators.CLOCK.instant().plusSeconds(1);
+
 	/**
 	 * Standard runner with:
 	 * - all required properties set
 	 * - ArgusUserResolver returning the externalId as-is (empty for "missing-user")
-	 * - ArgusVersionResolver returning 3L for all subjects
+	 * - ArgusVersionResolver returning EPOCH (never revoked) for all subjects
 	 * - Clock fixed at the test instant so tokens don't expire
 	 */
 	private ApplicationContextRunner runnerWithMinimalProperties()
@@ -80,7 +82,7 @@ final class ArgusPropertiesAssemblyTest
 				.withBean(ArgusUserResolver.class,
 						() -> (ArgusUserResolver<String>) externalId ->
 								"missing-user".equals(externalId) ? Optional.empty() : Optional.of(externalId))
-				.withBean(ArgusVersionResolver.class, () -> _ -> 3L)
+				.withBean(ArgusVersionResolver.class, () -> _ -> NEVER_REVOKED)
 				.withBean(Clock.class, () -> CLOCK);
 	}
 
@@ -174,7 +176,7 @@ final class ArgusPropertiesAssemblyTest
 					.withPropertyValues(
 							"argus.upstream.hmac-secret=" + UPSTREAM_SECRET,
 							"argus.internal.hmac-secret=" + INTERNAL_SECRET)
-					.withBean(ArgusVersionResolver.class, () -> _ -> 1L)
+					.withBean(ArgusVersionResolver.class, () -> _ -> NEVER_REVOKED)
 					.run(context -> assertThat(context).doesNotHaveBean(Authenticator.class));
 		}
 	}
@@ -226,10 +228,8 @@ final class ArgusPropertiesAssemblyTest
 							TestAuthenticators::authenticatedTokenContract)
 					.withBean(AuthenticatedTokenMintingConfiguration.class,
 							TestAuthenticators::authenticatedTokenMintingConfiguration)
-					.withBean(AuthenticatedTokenVerificationConfiguration.class,
-							TestAuthenticators::authenticatedTokenVerificationConfiguration)
 					.withBean(IdentityMappingConfiguration.class,
-							() -> TestAuthenticators.identityMappingConfiguration(_ -> 3L))
+							() -> TestAuthenticators.identityMappingConfiguration(_ -> NEVER_REVOKED))
 					.run(context ->
 					{
 						assertThat(context).hasSingleBean(Authenticator.class);
@@ -263,10 +263,8 @@ final class ArgusPropertiesAssemblyTest
 							() -> (Function<String, Optional<String>>) id ->
 									"missing-user".equals(id) ? Optional.empty() : Optional.of(id))
 					.withBean("argusVersionResolverFunction", Function.class,
-							() -> (Function<String, Long>) _ -> 3L)
+							() -> (Function<String, Instant>) _ -> NEVER_REVOKED)
 					.withBean(Clock.class, () -> CLOCK)
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.run(context ->
 					{
 						assertThat(context).hasSingleBean(Authenticator.class);
@@ -289,8 +287,6 @@ final class ArgusPropertiesAssemblyTest
 								functionCallCount.incrementAndGet();
 								return Optional.of(id);
 							})
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.run(context ->
 					{
 						final Authenticator authenticator = context.getBean(Authenticator.class);
@@ -306,13 +302,11 @@ final class ArgusPropertiesAssemblyTest
 
 			runnerWithMinimalProperties()
 					.withBean("argusVersionResolverFunction", Function.class,
-							() -> (Function<String, Long>) _ ->
+							() -> (Function<String, Instant>) _ ->
 							{
 								functionCallCount.incrementAndGet();
-								return 3L;
+								return NEVER_REVOKED;
 							})
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.run(context ->
 					{
 						final Authenticator authenticator = context.getBean(Authenticator.class);
@@ -351,14 +345,13 @@ final class ArgusPropertiesAssemblyTest
 							"argus.internal.hmac-secret=" + INTERNAL_SECRET)
 					.withBean(ArgusUserResolver.class,
 							() -> (ArgusUserResolver<String>) Optional::of)
-					.withBean(ArgusVersionResolver.class, () -> _ -> 1L)
+					.withBean(ArgusVersionResolver.class, () -> _ -> NEVER_REVOKED)
 					.run(context ->
 					{
 						assertThat(context).hasSingleBean(Authenticator.class);
 						final ArgusProperties props = context.getBean(ArgusProperties.class);
 						assertThat(props.internal().issuer()).isEqualTo("argus");
 						assertThat(props.internal().roleClaimName()).isEqualTo("roles");
-						assertThat(props.internal().versionClaimName()).isEqualTo("ver");
 						assertThat(props.internal().tokenTtl()).isEqualTo(Duration.ofMinutes(15));
 						assertThat(props.internal().upstreamIssuerClaimName()).isEqualTo("upstream_iss");
 						assertThat(props.upstream().requireSubject()).isTrue();
@@ -379,7 +372,7 @@ final class ArgusPropertiesAssemblyTest
 							"argus.internal.token-ttl=PT30M")
 					.withBean(ArgusUserResolver.class,
 							() -> (ArgusUserResolver<String>) Optional::of)
-					.withBean(ArgusVersionResolver.class, () -> _ -> 1L)
+					.withBean(ArgusVersionResolver.class, () -> _ -> NEVER_REVOKED)
 					.run(context ->
 					{
 						final ArgusProperties props = context.getBean(ArgusProperties.class);
@@ -396,16 +389,14 @@ final class ArgusPropertiesAssemblyTest
 							"argus.upstream.hmac-secret=" + UPSTREAM_SECRET,
 							"argus.internal.hmac-secret=" + INTERNAL_SECRET,
 							"argus.internal.role-claim-name=user_roles",
-							"argus.internal.version-claim-name=token_ver",
 							"argus.internal.upstream-issuer-claim-name=iss_upstream")
 					.withBean(ArgusUserResolver.class,
 							() -> (ArgusUserResolver<String>) Optional::of)
-					.withBean(ArgusVersionResolver.class, () -> _ -> 1L)
+					.withBean(ArgusVersionResolver.class, () -> _ -> NEVER_REVOKED)
 					.run(context ->
 					{
 						final ArgusProperties props = context.getBean(ArgusProperties.class);
 						assertThat(props.internal().roleClaimName()).isEqualTo("user_roles");
-						assertThat(props.internal().versionClaimName()).isEqualTo("token_ver");
 						assertThat(props.internal().upstreamIssuerClaimName()).isEqualTo("iss_upstream");
 					});
 		}
@@ -423,7 +414,7 @@ final class ArgusPropertiesAssemblyTest
 							"argus.internal.hmac-secret=" + INTERNAL_SECRET)
 					.withBean(ArgusUserResolver.class,
 							() -> (ArgusUserResolver<String>) Optional::of)
-					.withBean(ArgusVersionResolver.class, () -> _ -> 1L)
+					.withBean(ArgusVersionResolver.class, () -> _ -> NEVER_REVOKED)
 					.run(context ->
 					{
 						final ArgusProperties props = context.getBean(ArgusProperties.class);
@@ -441,7 +432,7 @@ final class ArgusPropertiesAssemblyTest
 					.withPropertyValues("argus.internal.hmac-secret=" + INTERNAL_SECRET)
 					.withBean(ArgusUserResolver.class,
 							() -> (ArgusUserResolver<String>) Optional::of)
-					.withBean(ArgusVersionResolver.class, () -> _ -> 1L)
+					.withBean(ArgusVersionResolver.class, () -> _ -> NEVER_REVOKED)
 					.run(context -> assertThat(context).hasFailed()
 					                                   .getFailure()
 					                                   .rootCause()
@@ -455,7 +446,7 @@ final class ArgusPropertiesAssemblyTest
 					.withPropertyValues("argus.upstream.hmac-secret=" + UPSTREAM_SECRET)
 					.withBean(ArgusUserResolver.class,
 							() -> (ArgusUserResolver<String>) Optional::of)
-					.withBean(ArgusVersionResolver.class, () -> _ -> 1L)
+					.withBean(ArgusVersionResolver.class, () -> _ -> NEVER_REVOKED)
 					.run(context -> assertThat(context).hasFailed()
 					                                   .getFailure()
 					                                   .rootCause()
@@ -477,8 +468,6 @@ final class ArgusPropertiesAssemblyTest
 			runnerWithMinimalProperties()
 					.withBean(RoleResolver.class,
 							() -> (RoleResolver<String>) _ -> Set.of("ROLE_ADMIN", "ROLE_USER"))
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.run(context ->
 					{
 						final AuthenticationResult result = context.getBean(Authenticator.class)
@@ -495,8 +484,6 @@ final class ArgusPropertiesAssemblyTest
 		void shouldReturnEmptyRolesWhenNoRoleResolverBeanIsPresent()
 		{
 			runnerWithMinimalProperties()
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.run(context ->
 					{
 						final AuthenticationResult result = context.getBean(Authenticator.class)
@@ -514,8 +501,6 @@ final class ArgusPropertiesAssemblyTest
 			runnerWithMinimalProperties()
 					.withBean(LocalSubjectResolver.class,
 							() -> (LocalSubjectResolver<String>) user -> "local::" + user)
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.run(context ->
 					{
 						final AuthenticationResult result = context.getBean(Authenticator.class)
@@ -532,8 +517,6 @@ final class ArgusPropertiesAssemblyTest
 		void shouldUseStringValueOfSubjectWhenNoLocalSubjectResolverBeanIsPresent()
 		{
 			runnerWithMinimalProperties()
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.run(context ->
 					{
 						final AuthenticationResult result = context.getBean(Authenticator.class)
@@ -547,13 +530,24 @@ final class ArgusPropertiesAssemblyTest
 		}
 
 		@Test
-		void shouldUseUserTokenVersionResolverBeanForVersionAtMintTime()
+		void shouldReturnNotCurrentWhenTokenIssuedBeforeLastRevocation()
 		{
-			// ArgusVersionResolver (current) returns 3L.
-			// UserTokenVersionResolver (at mint) returns 99L → minted token has ver=99, current=3 → NotCurrent.
-			runnerWithMinimalProperties()
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 99L)
+			// Token iat = CLOCK.instant(). lastRevokedAt = CLOCK.instant() + 1s > iat → superseded.
+			// Build a separate runner using REVOKED_AFTER_ISSUANCE instead of NEVER_REVOKED.
+			baseRunner()
+					.withPropertyValues(
+							"argus.upstream.hmac-secret=" + UPSTREAM_SECRET,
+							"argus.upstream.issuer=" + UPSTREAM_ISSUER,
+							"argus.upstream.audiences=" + AUDIENCE,
+							"argus.upstream.require-subject=true",
+							"argus.internal.issuer=" + INTERNAL_ISSUER,
+							"argus.internal.audiences=" + AUDIENCE,
+							"argus.internal.hmac-secret=" + INTERNAL_SECRET)
+					.withBean(ArgusUserResolver.class,
+							() -> (ArgusUserResolver<String>) externalId ->
+									"missing-user".equals(externalId) ? Optional.empty() : Optional.of(externalId))
+					.withBean(ArgusVersionResolver.class, () -> _ -> REVOKED_AFTER_ISSUANCE)
+					.withBean(Clock.class, () -> CLOCK)
 					.run(context ->
 					{
 						final AuthenticationResult result = context.getBean(Authenticator.class)
@@ -565,27 +559,10 @@ final class ArgusPropertiesAssemblyTest
 		}
 
 		@Test
-		void shouldDefaultMintVersionToOneWhenNoUserTokenVersionResolverBeanIsPresent()
+		void shouldSucceedWhenTokenIsIssuedAfterLastRevocation()
 		{
-			// Default UserTokenVersionResolver returns 1L.
-			// ArgusVersionResolver (current) returns 3L → minted=1, current=3 → NotCurrent.
+			// Token iat = CLOCK.instant(). lastRevokedAt = EPOCH (never revoked) → current.
 			runnerWithMinimalProperties()
-					.run(context ->
-					{
-						final AuthenticationResult result = context.getBean(Authenticator.class)
-						                                           .authenticate(
-																		   TestAuthenticators.token("external-user"));
-
-						assertThat(result).isInstanceOf(AuthenticationNotCurrent.class);
-					});
-		}
-
-		@Test
-		void shouldSucceedWhenMintVersionAndCurrentVersionMatch()
-		{
-			runnerWithMinimalProperties()
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.run(context ->
 					{
 						final AuthenticationResult result = context.getBean(Authenticator.class)
@@ -652,8 +629,6 @@ final class ArgusPropertiesAssemblyTest
 			runnerWithMinimalProperties()
 					.withBean("argusLocalSubjectResolverFunction", Function.class,
 							() -> (Function<String, String>) user -> "fn::" + user)
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.run(context ->
 					{
 						final AuthenticationResult result = context.getBean(Authenticator.class)
@@ -680,8 +655,6 @@ final class ArgusPropertiesAssemblyTest
 								functionCallCount.incrementAndGet();
 								return "fn::" + user;
 							})
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.run(context ->
 					{
 						final AuthenticationResult result = context.getBean(Authenticator.class)
@@ -695,15 +668,25 @@ final class ArgusPropertiesAssemblyTest
 					});
 		}
 
-		// ── UserTokenVersionResolver ──
+		// ── ArgusVersionResolver (revocation resolver) ──
 
 		@Test
-		void shouldUseUserTokenVersionResolverFunctionBeanWhenNoTypedBeanIsPresent()
+		void shouldUseVersionResolverFunctionBeanWhenNoTypedBeanIsPresent()
 		{
-			// ToLongFunction returns 3L (matching current version 3L from ArgusVersionResolver) → success
-			runnerWithMinimalProperties()
-					.withBean("argusUserTokenVersionResolverFunction", ToLongFunction.class,
-							() -> (ToLongFunction<String>) _ -> 3L)
+			// Function returns NEVER_REVOKED → token always current → success
+			baseRunner()
+					.withPropertyValues(
+							"argus.upstream.hmac-secret=" + UPSTREAM_SECRET,
+							"argus.upstream.issuer=" + UPSTREAM_ISSUER,
+							"argus.upstream.audiences=" + AUDIENCE,
+							"argus.internal.issuer=" + INTERNAL_ISSUER,
+							"argus.internal.audiences=" + AUDIENCE,
+							"argus.internal.hmac-secret=" + INTERNAL_SECRET)
+					.withBean(ArgusUserResolver.class,
+							() -> (ArgusUserResolver<String>) Optional::of)
+					.withBean("argusVersionResolverFunction", Function.class,
+							() -> (Function<String, Instant>) _ -> NEVER_REVOKED)
+					.withBean(Clock.class, () -> CLOCK)
 					.run(context ->
 					{
 						final AuthenticationResult result = context.getBean(Authenticator.class)
@@ -715,12 +698,22 @@ final class ArgusPropertiesAssemblyTest
 		}
 
 		@Test
-		void shouldProduceNotCurrentWhenUserTokenVersionResolverFunctionReturnsMismatch()
+		void shouldProduceNotCurrentWhenVersionResolverFunctionReturnsPostIssuanceTimestamp()
 		{
-			// ToLongFunction returns 99L (minted), current version is 3L → NotCurrent
-			runnerWithMinimalProperties()
-					.withBean("argusUserTokenVersionResolverFunction", ToLongFunction.class,
-							() -> (ToLongFunction<String>) _ -> 99L)
+			// Function returns REVOKED_AFTER_ISSUANCE → token iat < lastRevokedAt → NotCurrent
+			baseRunner()
+					.withPropertyValues(
+							"argus.upstream.hmac-secret=" + UPSTREAM_SECRET,
+							"argus.upstream.issuer=" + UPSTREAM_ISSUER,
+							"argus.upstream.audiences=" + AUDIENCE,
+							"argus.internal.issuer=" + INTERNAL_ISSUER,
+							"argus.internal.audiences=" + AUDIENCE,
+							"argus.internal.hmac-secret=" + INTERNAL_SECRET)
+					.withBean(ArgusUserResolver.class,
+							() -> (ArgusUserResolver<String>) Optional::of)
+					.withBean("argusVersionResolverFunction", Function.class,
+							() -> (Function<String, Instant>) _ -> REVOKED_AFTER_ISSUANCE)
+					.withBean(Clock.class, () -> CLOCK)
 					.run(context ->
 					{
 						final AuthenticationResult result = context.getBean(Authenticator.class)
@@ -728,33 +721,6 @@ final class ArgusPropertiesAssemblyTest
 																		   TestAuthenticators.token("external-user"));
 
 						assertThat(result).isInstanceOf(AuthenticationNotCurrent.class);
-					});
-		}
-
-		@Test
-		void shouldPreferUserTokenVersionResolverTypedBeanOverFunctionBean()
-		{
-			final AtomicInteger functionCallCount = new AtomicInteger();
-
-			// Typed bean returns 3L (matches current) → success.
-			// ToLongFunction returns 99L (would cause NotCurrent), but it must never be called.
-			runnerWithMinimalProperties()
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
-					.withBean("argusUserTokenVersionResolverFunction", ToLongFunction.class,
-							() -> (ToLongFunction<String>) _ ->
-							{
-								functionCallCount.incrementAndGet();
-								return 99L;
-							})
-					.run(context ->
-					{
-						final AuthenticationResult result = context.getBean(Authenticator.class)
-						                                           .authenticate(
-																		   TestAuthenticators.token("external-user"));
-
-						assertThat(result).isInstanceOf(AuthenticationSuccess.class);
-						assertThat(functionCallCount).hasValue(0);
 					});
 		}
 	}
@@ -773,8 +739,6 @@ final class ArgusPropertiesAssemblyTest
 			final RecordingCache cache = new RecordingCache();
 
 			runnerWithMinimalProperties()
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.withBean(TokenAuthenticationCache.class, () -> cache)
 					.run(context ->
 					{
@@ -795,8 +759,6 @@ final class ArgusPropertiesAssemblyTest
 		{
 			// No cache bean → no-op → every call hits the delegate → still works
 			runnerWithMinimalProperties()
-					.withBean(UserTokenVersionResolver.class,
-							() -> (UserTokenVersionResolver<String>) _ -> 3L)
 					.run(context ->
 					{
 						final Authenticator authenticator = context.getBean(Authenticator.class);
@@ -831,7 +793,7 @@ final class ArgusPropertiesAssemblyTest
 					.withBean(ArgusUserResolver.class,
 							() -> (ArgusUserResolver<String>) externalId ->
 									"missing-user".equals(externalId) ? Optional.empty() : Optional.of(externalId))
-					.withBean(ArgusVersionResolver.class, () -> _ -> 3L)
+					.withBean(ArgusVersionResolver.class, () -> _ -> NEVER_REVOKED)
 					.withBean(Clock.class, () -> futureClockFarAhead)
 					.run(context ->
 					{

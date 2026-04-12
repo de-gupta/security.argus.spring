@@ -3,12 +3,11 @@ package de.gupta.security.argus.spring.test;
 import de.gupta.security.argus.api.authentication.Authenticator;
 import de.gupta.security.argus.api.authentication.AuthenticatorConfiguration;
 import de.gupta.security.argus.api.authentication.AuthenticatorFactory;
-import de.gupta.security.argus.api.identity.AuthenticatedSubjectVersionResolver;
 import de.gupta.security.argus.api.identity.ExternalIdentityAdapter;
 import de.gupta.security.argus.api.identity.IdentityMappingConfiguration;
+import de.gupta.security.argus.api.identity.UserRevocationResolver;
 import de.gupta.security.argus.api.token.AuthenticatedTokenContract;
 import de.gupta.security.argus.api.token.AuthenticatedTokenMintingConfiguration;
-import de.gupta.security.argus.api.token.AuthenticatedTokenVerificationConfiguration;
 import de.gupta.security.argus.api.token.TokenSignerConfiguration;
 import de.gupta.security.argus.api.trust.TokenTrustPolicy;
 import de.gupta.security.argus.api.trust.UpstreamTrustConfiguration;
@@ -38,19 +37,27 @@ public final class TestAuthenticators
     public static final String DIFFERENT_UPSTREAM_SECRET = "other-upstream-secret-value-long-enough";
     public static final String INTERNAL_SECRET = "internal-secret-value-that-is-long-enough";
 
-    public static Authenticator directAuthenticator(final AtomicLong currentVersion)
+    // Token iat = CLOCK.instant(). NEVER_REVOKED = EPOCH means always current.
+    // REVOKED_AFTER_ISSUANCE means lastRevokedAt > token.iat → superseded.
+    public static final Instant NEVER_REVOKED = Instant.EPOCH;
+    public static final Instant REVOKED_AFTER_ISSUANCE = CLOCK.instant().plusSeconds(1);
+
+    /**
+     * Creates an authenticator where the AtomicLong is unused but kept for API compatibility with tests.
+     * All tokens are treated as current (never revoked).
+     */
+    public static Authenticator directAuthenticator(final AtomicLong ignored)
     {
-        return AuthenticatorFactory.create(authenticatorConfiguration(currentVersion));
+        return AuthenticatorFactory.create(authenticatorConfiguration(ignored));
     }
 
-    public static AuthenticatorConfiguration<String, String> authenticatorConfiguration(final AtomicLong currentVersion)
+    public static AuthenticatorConfiguration<String, String> authenticatorConfiguration(final AtomicLong ignored)
     {
         return AuthenticatorConfiguration.<String, String>builder()
                 .upstreamTrustConfiguration(upstreamTrustConfiguration())
                 .authenticatedTokenContract(authenticatedTokenContract())
                 .authenticatedTokenMintingConfiguration(authenticatedTokenMintingConfiguration())
-                .authenticatedTokenVerificationConfiguration(authenticatedTokenVerificationConfiguration())
-                .identityMappingConfiguration(identityMappingConfiguration(_ -> currentVersion.get()))
+                                         .identityMappingConfiguration(identityMappingConfigurationWithStaleness())
                 .clock(CLOCK)
                 .build();
     }
@@ -76,16 +83,8 @@ public final class TestAuthenticators
         return AuthenticatedTokenMintingConfiguration.of(TokenSignerConfiguration.Hmac.of(INTERNAL_SECRET));
     }
 
-    public static AuthenticatedTokenVerificationConfiguration authenticatedTokenVerificationConfiguration()
-    {
-        return AuthenticatedTokenVerificationConfiguration.of(TokenTrustPolicy.of(Duration.ZERO,
-                true,
-                Set.of(AUDIENCE),
-                Optional.of(INTERNAL_ISSUER)));
-    }
-
     public static IdentityMappingConfiguration<String, String> identityMappingConfiguration(
-            final AuthenticatedSubjectVersionResolver authenticatedSubjectVersionResolver)
+            final UserRevocationResolver<String> revocationResolver)
     {
         return IdentityMappingConfiguration.of(ExternalIdentityAdapter.stringIdentity(),
                 externalIdentity -> switch (externalIdentity)
@@ -97,7 +96,6 @@ public final class TestAuthenticators
                 user -> switch (user)
                 {
                     case "missing-subject" -> " ";
-                    case "stale-user" -> "local-stale-user";
                     default -> "local-" + user;
                 },
                 user -> switch (user)
@@ -106,13 +104,40 @@ public final class TestAuthenticators
                     case "support-user" -> Set.of("ROLE_USER", "ROLE_SUPPORT");
                     default -> Set.of("ROLE_USER");
                 },
-                user -> "stale-user".equals(user) ? 7L : 3L,
-                authenticatedSubjectVersionResolver);
+                revocationResolver);
     }
 
-    public static AuthenticatedIdentity authenticatedIdentity(final AtomicLong currentVersion)
+    /**
+     * Creates identity mapping where stale-user has been revoked after their token was issued.
+     * All other users are treated as current (never revoked).
+     */
+    public static IdentityMappingConfiguration<String, String> identityMappingConfigurationWithStaleness()
     {
-        final AuthenticationResult result = directAuthenticator(currentVersion).authenticate(token("external-user"));
+        return IdentityMappingConfiguration.of(ExternalIdentityAdapter.stringIdentity(),
+                externalIdentity -> switch (externalIdentity)
+                {
+                    case "missing-user" -> Optional.empty();
+                    case "exploding-user" -> throw new IllegalStateException("user lookup offline");
+                    default -> Optional.of(externalIdentity.replace("external-", ""));
+                },
+                user -> switch (user)
+                {
+                    case "missing-subject" -> " ";
+                    default -> "local-" + user;
+                },
+                user -> switch (user)
+                {
+                    case "admin-user" -> Set.of("ROLE_USER", "ROLE_ADMIN");
+                    case "support-user" -> Set.of("ROLE_USER", "ROLE_SUPPORT");
+                    default -> Set.of("ROLE_USER");
+                },
+                // stale-user was revoked after their token was issued
+                user -> "stale-user".equals(user) ? REVOKED_AFTER_ISSUANCE : NEVER_REVOKED);
+    }
+
+    public static AuthenticatedIdentity authenticatedIdentity(final AtomicLong ignored)
+    {
+        final AuthenticationResult result = directAuthenticator(ignored).authenticate(token("external-user"));
         return ((AuthenticationSuccess) result).identity();
     }
 
@@ -142,4 +167,3 @@ public final class TestAuthenticators
     {
     }
 }
-

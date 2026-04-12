@@ -7,10 +7,8 @@ import de.gupta.security.argus.api.cache.TokenAuthenticationCache;
 import de.gupta.security.argus.api.identity.IdentityMappingConfiguration;
 import de.gupta.security.argus.api.identity.LocalSubjectResolver;
 import de.gupta.security.argus.api.identity.RoleResolver;
-import de.gupta.security.argus.api.identity.UserTokenVersionResolver;
 import de.gupta.security.argus.api.token.AuthenticatedTokenContract;
 import de.gupta.security.argus.api.token.AuthenticatedTokenMintingConfiguration;
-import de.gupta.security.argus.api.token.AuthenticatedTokenVerificationConfiguration;
 import de.gupta.security.argus.api.trust.UpstreamTrustConfiguration;
 import de.gupta.security.argus.spring.adapter.authentication.ArgusAuthenticationProvider;
 import de.gupta.security.argus.spring.adapter.authentication.BearerTokenAuthenticationConverter;
@@ -77,13 +75,11 @@ public class ArgusAuthenticatorAdapterConfiguration
 			final ArgusVersionResolver versionResolver,
 			final ObjectProvider<RoleResolver<?>> roleResolverProvider,
 			final ObjectProvider<LocalSubjectResolver<?>> localSubjectResolverProvider,
-			final ObjectProvider<UserTokenVersionResolver<?>> userTokenVersionResolverProvider,
 			final ObjectProvider<Clock> clockProvider,
 			final ObjectProvider<TokenAuthenticationCache> cacheProvider)
 	{
 		return ArgusPropertiesAssembler.of(argusProperties, userResolver, versionResolver,
-											   roleResolverProvider, localSubjectResolverProvider,
-											   userTokenVersionResolverProvider, clockProvider, cacheProvider)
+											   roleResolverProvider, localSubjectResolverProvider, clockProvider, cacheProvider)
 		                               .assemble();
 	}
 
@@ -96,13 +92,11 @@ public class ArgusAuthenticatorAdapterConfiguration
 	@ConditionalOnBean(value = {UpstreamTrustConfiguration.class,
 			AuthenticatedTokenContract.class,
 			AuthenticatedTokenMintingConfiguration.class,
-			AuthenticatedTokenVerificationConfiguration.class,
 			IdentityMappingConfiguration.class})
 	AuthenticatorConfiguration<?, ?> argusManagedAuthenticatorConfiguration(
 			final UpstreamTrustConfiguration upstreamTrustConfiguration,
 			final AuthenticatedTokenContract authenticatedTokenContract,
 			final AuthenticatedTokenMintingConfiguration authenticatedTokenMintingConfiguration,
-			final AuthenticatedTokenVerificationConfiguration authenticatedTokenVerificationConfiguration,
 			final IdentityMappingConfiguration<?, ?> identityMappingConfiguration,
 			final ObjectProvider<Clock> clockProvider,
 			final ObjectProvider<TokenAuthenticationCache> cacheProvider)
@@ -110,7 +104,6 @@ public class ArgusAuthenticatorAdapterConfiguration
 		return AuthenticatorConfiguration.of(upstreamTrustConfiguration,
 				authenticatedTokenContract,
 				authenticatedTokenMintingConfiguration,
-				authenticatedTokenVerificationConfiguration,
 				identityMappingConfiguration,
 				clockProvider.getIfAvailable(Clock::systemUTC),
 				cacheProvider.getIfAvailable(TokenAuthenticationCache::noOp));

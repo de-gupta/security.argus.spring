@@ -230,13 +230,11 @@ final class ArgusAuthenticationProviderAuthenticateTest
                 .upstreamTrustConfiguration(TestAuthenticators.upstreamTrustConfiguration())
                 .authenticatedTokenContract(TestAuthenticators.authenticatedTokenContract())
                 .authenticatedTokenMintingConfiguration(TestAuthenticators.authenticatedTokenMintingConfiguration())
-                .authenticatedTokenVerificationConfiguration(TestAuthenticators.authenticatedTokenVerificationConfiguration())
                 .identityMappingConfiguration(IdentityMappingConfiguration.of(ExternalIdentityAdapter.stringIdentity(),
                         externalIdentity -> Optional.of(externalIdentity.replace("external-", "")),
                         user -> "local-" + user,
-                        user -> Set.of("ADMIN", "USER"),
-                        user -> 3L,
-                        _ -> 3L))
+                        _ -> Set.of("ADMIN", "USER"),
+                        _ -> java.time.Instant.EPOCH))
                 .clock(TestAuthenticators.CLOCK)
                 .build();
         return AuthenticatorFactory.create(configuration);

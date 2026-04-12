@@ -5,7 +5,6 @@ import de.gupta.security.argus.api.authentication.AuthenticatorConfiguration;
 import de.gupta.security.argus.api.identity.IdentityMappingConfiguration;
 import de.gupta.security.argus.api.token.AuthenticatedTokenContract;
 import de.gupta.security.argus.api.token.AuthenticatedTokenMintingConfiguration;
-import de.gupta.security.argus.api.token.AuthenticatedTokenVerificationConfiguration;
 import de.gupta.security.argus.api.trust.UpstreamTrustConfiguration;
 import de.gupta.security.argus.spring.api.authentication.ArgusAuthenticationFilter;
 import de.gupta.security.argus.spring.api.context.ArgusSecurityContextQueryManager;
@@ -77,10 +76,9 @@ final class ArgusSpringConfigurationTest
                                                     TestAuthenticators::authenticatedTokenContract)
                                             .withBean(AuthenticatedTokenMintingConfiguration.class,
                                                     TestAuthenticators::authenticatedTokenMintingConfiguration)
-                                            .withBean(AuthenticatedTokenVerificationConfiguration.class,
-                                                    TestAuthenticators::authenticatedTokenVerificationConfiguration)
                                             .withBean(IdentityMappingConfiguration.class,
-                                                    () -> TestAuthenticators.identityMappingConfiguration(_ -> 3L))
+                                                    () -> TestAuthenticators.identityMappingConfiguration(
+                                                            _ -> java.time.Instant.EPOCH))
                                             .run(context -> {
                                                 assertThat(context).hasSingleBean(AuthenticatorConfiguration.class);
                                                 assertThat(context).hasSingleBean(Authenticator.class);
