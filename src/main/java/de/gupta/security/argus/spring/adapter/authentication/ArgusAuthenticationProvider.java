@@ -11,6 +11,8 @@ import de.gupta.security.argus.domain.model.authentication.currentness.Authentic
 import de.gupta.security.argus.domain.model.authentication.identity.IdentityNotResolved;
 import de.gupta.security.argus.domain.model.identity.AuthenticatedIdentity;
 import de.gupta.security.argus.spring.api.authentication.ArgusAuthenticationToken;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -27,6 +29,8 @@ import java.util.stream.Collectors;
 
 public final class ArgusAuthenticationProvider implements AuthenticationProvider
 {
+	private static final Logger LOG = LoggerFactory.getLogger(ArgusAuthenticationProvider.class);
+
 	private final Authenticator authenticator;
 
 	@Override
@@ -42,10 +46,10 @@ public final class ArgusAuthenticationProvider implements AuthenticationProvider
 		{
 			case AuthenticationSuccess success -> ArgusAuthenticationToken.authenticated(success.identity(),
 					authoritiesOf(success.identity()));
-			case InvalidCredential failure -> throw new BadCredentialsException(messageOf(failure));
-			case IdentityNotResolved failure -> throw new BadCredentialsException(messageOf(failure));
-			case AuthenticationNotCurrent failure -> throw new CredentialsExpiredException(messageOf(failure));
-			case AuthenticationUnavailable failure -> throw new AuthenticationServiceException(messageOf(failure));
+			case InvalidCredential failure -> throw logAndWrapBadCredentials(failure);
+			case IdentityNotResolved failure -> throw logAndWrapBadCredentials(failure);
+			case AuthenticationNotCurrent failure -> throw logAndWrapExpiredCredentials(failure);
+			case AuthenticationUnavailable failure -> throw logAndWrapServiceUnavailable(failure);
 		};
 	}
 
@@ -77,6 +81,28 @@ public final class ArgusAuthenticationProvider implements AuthenticationProvider
 		return failure.details()
 		              .map(FailureDetails::message)
 		              .orElseGet(failure::description);
+	}
+
+	private BadCredentialsException logAndWrapBadCredentials(final AuthenticationFailure failure)
+	{
+		final String message = messageOf(failure);
+		LOG.debug("Argus authentication rejected the presented bearer token: {}", message);
+		return new BadCredentialsException(message);
+	}
+
+	private CredentialsExpiredException logAndWrapExpiredCredentials(final AuthenticationFailure failure)
+	{
+		final String message = messageOf(failure);
+		LOG.info("Argus authentication rejected a no-longer-current bearer token: {}", message);
+		return new CredentialsExpiredException(message);
+	}
+
+	private AuthenticationServiceException logAndWrapServiceUnavailable(final AuthenticationFailure failure)
+	{
+		final String message = messageOf(failure);
+		LOG.warn("Argus authentication could not complete because a required dependency was unavailable: {}",
+				message);
+		return new AuthenticationServiceException(message);
 	}
 
 	public ArgusAuthenticationProvider(final Authenticator authenticator)

@@ -7,6 +7,8 @@ open module de.gupta.security.argus.spring
 
 	requires de.gupta.aletheia;
 
+	requires org.slf4j;
+
 	requires transitive de.gupta.security.argus;
 	requires transitive jakarta.servlet;
 	requires transitive spring.beans;
@@ -18,5 +20,4 @@ open module de.gupta.security.argus.spring
 	requires transitive spring.security.core;
 	requires transitive spring.security.web;
 	requires transitive spring.web;
-
 }
