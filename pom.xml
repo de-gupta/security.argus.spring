@@ -9,7 +9,7 @@
     </parent>
 
     <artifactId>security.argus.spring</artifactId>
-    <version>3.0.1-SNAPSHOT</version>
+    <version>3.0.1</version>
 
     <name>${artifactId}</name>
     <description>A spring wrapper for the library for orchestrating the authentication using tokens</description>
@@ -109,6 +109,6 @@
         <connection>scm:git:ssh://git@github.com/de-gupta/security.argus.spring.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/de-gupta/security.argus.spring.git</developerConnection>
         <url>https://github.com/de-gupta/security.argus.spring.git</url>
-        <tag>HEAD</tag>
+        <tag>v3.0.1</tag>
     </scm>
 </project>
