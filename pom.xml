@@ -5,7 +5,7 @@
     <parent>
         <groupId>io.github.de-gupta</groupId>
         <artifactId>security.parent</artifactId>
-        <version>1.0.0</version>
+        <version>1.1.0</version>
     </parent>
 
     <artifactId>security.argus.spring</artifactId>
@@ -16,8 +16,7 @@
     <url>https://github.com/de-gupta/security.argus.spring.git</url>
 
     <properties>
-        <security.dependencies.bom.version>1.0.0</security.dependencies.bom.version>
-        <security.argus.version>3.0.0</security.argus.version>
+        <security.argus.version>3.0.1</security.argus.version>
 
         <spring.boot.version>3.5.13</spring.boot.version>
     </properties>
@@ -28,13 +27,6 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring.boot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>io.github.de-gupta</groupId>
-                <artifactId>security.dependencies.bom</artifactId>
-                <version>${security.dependencies.bom.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
